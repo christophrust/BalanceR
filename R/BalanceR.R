@@ -3,13 +3,14 @@
 #' Create the account structure required by Balance sheets according to
 #' German HGB for so-called Kaptitalgesellschaften.
 #' @export
+#' @import dplyr
 MakeBalanceAccounts <- function(x, which = "small"){
     if (which == "verysmall"){
         ## tbd
     } else if (which == "small"){
-        x_split <- str_split(x, ":")
+        x_split <- stringr::str_split(x, ":")
         x_hrchy <- sapply(x_split, function(xx){
-            str_c(xx[1:max(which(str_detect(xx, "[A-GIV1-9]*\\.\\s")))], collapse = ":")
+            stringr::str_c(xx[1:max(which(stringr::str_detect(xx, "[A-GIV1-9]*\\.\\s")))], collapse = ":")
         })
     }
     x_hrchy
@@ -30,28 +31,29 @@ MakeBalanceAccounts <- function(x, which = "small"){
 #' @details function only in beta state...
 #' @export
 AggStructure <- function(x){
-    maxdepth <- vapply(str_split(x$account, ":"), length, 0) %>%
+    maxdepth <- vapply(stringr::str_split(x$account, ":"), length, 0) %>%
         max()
 
     lapply(1:maxdepth, function(d){
         x %>%
             mutate(
                 sort_name = (function(acc, depth){
-                    vapply(str_split(acc, ":"),
+                    vapply(stringr::str_split(acc, ":"),
                            function(x) {
                                str_c(x[1:min(depth, length(x))], collapse = ":")
                            },
                            character(1))
                 })(account, d),
                 real_name = (function(acc, depth){
-                    vapply(str_split(acc, ":"),
+                    vapply(stringr::str_split(acc, ":"),
                            function(x) {
-                               str_c(str_c(rep("\\phantom{---}", times = max(0,depth-2)),
+                               stringr::str_c(stringr::str_c(rep("\\phantom{---}",
+                                                                 times = max(0,depth-2)),
                                            collapse = ""), x[depth])
                            },
                            character(1))
                 })(account, d)) %>%
-            drop_na() %>%
+            tidyr::drop_na() %>%
             group_by(sort_name, real_name) %>%
             summarise(amount = sum(amount)) %>%
             ungroup()
@@ -68,7 +70,7 @@ AggStructure <- function(x){
 #'
 #' @param journal The a data frame as returned from the \code{register} function
 #' of the package \code{ledger}.
-#' 
+#'
 #' @param which Character of length one, indicating up to which hierarchy the balance
 #' sheet has to be created. "verysmall" for 'Kleinstkapitalgesellschaften', "small" for
 #' 'Kleinkapitalgesellschaften' and "normal" for all other sizes. This will affect, how
@@ -87,19 +89,19 @@ AggStructure <- function(x){
 #' @export
 CreateBalanceSheet <- function(journal, which = "small"){
     agg <- journal %>%
-        filter(str_detect(account, "Aktiv") | str_detect(account, "Passiv")) %>%
+        filter(stringr::str_detect(account, "Aktiv") | stringr::str_detect(account, "Passiv")) %>%
         mutate(balance_var_small = MakeBalanceAccounts(account, which = which)) %>%
         group_by(balance_var_small) %>%
         summarize(amount = sum(amount))
 
     ## create active and passiv side of balance seperately
     akt <- agg %>%
-        filter(str_detect(balance_var_small, "Aktiv")) %>%
+        filter(stringr::str_detect(balance_var_small, "Aktiv")) %>%
         rename(account = balance_var_small) %>%
         AggStructure() %>%
         filter(real_name != "Aktiva")
     pas <- agg %>%
-        filter(str_detect(balance_var_small, "Passiv")) %>%
+        filter(stringr::str_detect(balance_var_small, "Passiv")) %>%
         rename(account = balance_var_small) %>%
         AggStructure() %>%
         filter(real_name != "Passiva") %>%
@@ -119,14 +121,14 @@ CreateBalanceSheet <- function(journal, which = "small"){
     bal <- rbind(bal,
                  data.frame(names_akt = "Summe Aktiva",
                             val_akt = sum((agg %>%
-                                           filter(str_detect(balance_var_small,
+                                           filter(stringr::str_detect(balance_var_small,
                                                              "Aktiva")))$amount
                                           ),
                             names_pas = "Summe Passiva",
                             val_pas = -sum((agg %>%
-                                            filter(str_detect(balance_var_small,
+                                            filter(stringr::str_detect(balance_var_small,
                                                               "Passiva")))$amount
                                            )))
-    xtable(bal, align = c("l","L{0.38\\textheight}", "R{0.1\\textheight}",
+    xtable::xtable(bal, align = c("l","L{0.38\\textheight}", "R{0.1\\textheight}",
                           "|","L{0.38\\textheight}", "R{0.1\\textheight}"))
 }

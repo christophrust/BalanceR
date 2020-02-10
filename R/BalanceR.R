@@ -150,3 +150,5 @@ CreateBalanceSheet <- function(journal, which = "small", tablewidth = "\\textwid
                                   paste0("L{", colwidths[1], "}"),
                                   paste0("R{", colwidths[2], "}")))
 }
+
+

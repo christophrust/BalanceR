@@ -100,7 +100,8 @@ AggStructure <- function(x){
 #'
 #' @export
 CreateBalanceSheet <- function(journal, which = "small", tablewidth = "\\textwidth",
-                               colwidths = paste0(c(0.3,0.08),tablewidth)){
+                               colwidths = paste0(c(0.3,0.08),tablewidth),
+                               file = NULL) {
     agg <- journal %>%
         filter(stringr::str_detect(account, "Aktiv") | stringr::str_detect(account, "Passiv")) %>%
         mutate(balance_var_small = MakeBalanceAccounts(account, which = which)) %>%
@@ -132,23 +133,73 @@ CreateBalanceSheet <- function(journal, which = "small", tablewidth = "\\textwid
     }
     names(akt) <- c("names_akt", "val_akt")
     names(pas) <- c("names_pas", "val_pas")
+
     bal <- cbind(akt, pas)
     bal <- rbind(bal,
                  data.frame(names_akt = "Summe Aktiva",
                             val_akt = sum((agg %>%
                                            filter(stringr::str_detect(balance_var_small,
-                                                             "Aktiva")))$amount
+                                                                      "Aktiva")))$amount
                                           ),
                             names_pas = "Summe Passiva",
                             val_pas = -sum((agg %>%
                                             filter(stringr::str_detect(balance_var_small,
-                                                              "Passiva")))$amount
+                                                                       "Passiva")))$amount
                                            )))
-    xtable::xtable(bal, align = c("l", paste0("L{", colwidths[1], "}"),
-                                  paste0("R{", colwidths[2], "}"),
-                                  "|",
-                                  paste0("L{", colwidths[1], "}"),
-                                  paste0("R{", colwidths[2], "}")))
+    if (is.null(file)){
+        xtable::xtable(bal, align = c("l", paste0("L{", colwidths[1], "}"),
+                                      paste0("R{", colwidths[2], "}"),
+                                      "|",
+                                      paste0("L{", colwidths[1], "}"),
+                                      paste0("R{", colwidths[2], "}")))
+    } else {
+        c("\\ifdefined\\BalItem",
+          "\\else",
+          "\\newcolumntype{L}[1]{>{\\raggedright\\arraybackslash}p{#1}}",
+          "\\newcolumntype{C}[1]{>{\\centering\\arraybackslash}p{#1}}",
+          "\\newcolumntype{R}[1]{>{\\raggedleft\\arraybackslash}p{#1}}",
+          "\\newlength{\\mbylength}",
+          "\\newlength{\\mbyl}",
+          "\\def\\BalItem#1#2#3{\\setlength{\\mbylength}{\\linewidth}\\settowidth{\\mbyl}{#3}\\addtolength{\\mbylength}{-1.5\\mbyl}\\parbox{\\mbyl}{#1}\\parbox[t]{\\mbylength}{#2}}",
+          "\\def\\BalItemOne#1#2{\\BalItem{#1}{#2}{A.-}}",
+          "\\def\\BalItemTwo#1#2{\\BalItem{\\phantom{---}#1}{#2}{---III.-}}",
+          "\\def\\BalItemThree#1#2{\\BalItem{\\phantom{------}#1}{#2}{------8.-}}",
+          "\\fi",
+          "\\begin{tabular}{l|r}",
+          "\\toprule",
+          paste0("\\begin{minipage}[t]{0.5",tablewidth," }"),
+          paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
+          bal %>%
+          select(names_akt, val_akt) %>% {
+              vapply(1:(nrow(.)-1), function(x){
+                  paste0(.[x,1], "&", .[x,2], "\\\\")
+              }, character(1))
+          },
+          "\\end{tabular}",
+          "\\end{minipage}",
+          "&",
+          paste0("\\begin{minipage}[t]{0.5",tablewidth," }"),
+          paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
+          pas %>%
+          select(names_pas, val_pas) %>% {
+              vapply(1:(nrow(.)-1), function(x){
+                  paste0(.[x,1], "&", .[x,2], "\\\\")
+              }, character(1))
+          },
+          "\\end{tabular}",
+          "\\end{minipage}\\\\",
+          "\\midrule",
+          paste0("\\textbf{",
+                 paste0(bal[nrow(bal) ,c("names_akt", "val_akt")],
+                        collapse = "} \\hfill \\textbf{"),"} &",
+                 "\\textbf{",
+                 paste0(bal[nrow(bal) ,c("names_pas", "val_pas")],
+                        collapse = "} \\hfill \\textbf{"),"}\\\\"),
+          "\\end{tabular}") %>%
+            stringr::str_replace_all("NA", "") %>%
+            stringr::str_replace_all("myItem", "BalItem") %>%
+            writeLines(con = file)
+    }
 }
 
 

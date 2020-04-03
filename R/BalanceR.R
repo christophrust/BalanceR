@@ -75,6 +75,80 @@ AggStructure <- function(x){
         select(real_name, amount)
 }
 
+#' CreateTable
+#'
+#' Create a table from a yournal according to a given scheme, specified by via
+#' the argument \code{which}.
+#'
+#' @param journal A data frame as returned from the \code{register} function
+#' of the package \code{ledger}.
+#'
+#' @param which Character of length one, indicating up to which hierarchy the balance
+#' sheet has to be created. "verysmall" for 'Kleinstkapitalgesellschaften', "small" for
+#' 'Kleinkapitalgesellschaften' and "normal" for all other sizes. This will affect, how
+#' detailed the resulting balance sheet will be.
+#'
+#' @return A list with two data frames with two columns, first column
+#' contains the aggregated account name according to the scheme and
+#' the second column contains the corresponding value.
+#' The first entry is the "Aktiv", the second the "Passiv" part of the balance.
+#'
+#' @export
+CreateTable <- function(journal, which){
+
+    agg <- journal %>%
+        filter(stringr::str_detect(account, "Aktiv") | stringr::str_detect(account, "Passiv")) %>%
+        mutate(balance_var_small = MakeBalanceAccounts(account, which = which)) %>%
+        group_by(balance_var_small) %>%
+        summarize(amount = sum(amount))
+
+    ## create active and passiv side of balance seperately
+    akt <- agg %>%
+        filter(stringr::str_detect(balance_var_small, "Aktiv")) %>%
+        rename(account = balance_var_small) %>%
+        AggStructure() %>%
+        filter(real_name != "Aktiva") %>%
+        mutate(amount = na_if(amount, 0))
+    pas <- agg %>%
+        filter(stringr::str_detect(balance_var_small, "Passiv")) %>%
+        rename(account = balance_var_small) %>%
+        AggStructure() %>%
+        filter(real_name != "Passiva") %>%
+        mutate(amount = -amount,
+               amount = na_if(amount, 0))
+
+    ## create tex tables
+    ## if (nrow(akt) > nrow(pas)){
+    ##     pas <- rbind(pas, data.frame(real_name = rep("", times = nrow(akt) - nrow(pas)),
+    ##                                  amount = rep(NA, times = nrow(akt) - nrow(pas))))
+    ## } else if (nrow(akt) < nrow(pas)) {
+    ##     akt <- rbind(akt, data.frame(real_name = rep("", times = nrow(pas) - nrow(akt)),
+    ##                                  amount = rep(NA, times = nrow(pas) - nrow(akt))))
+    ## }
+
+    names(akt) <- c("names_akt", "val_akt")
+    names(pas) <- c("names_pas", "val_pas")
+
+    ## bal <- cbind(akt, pas)
+    bal <- list(
+        akt = rbind(akt, data.frame(names_akt = "Summe Aktiva",
+                            val_akt = sum((agg %>%
+                                           filter(stringr::str_detect(balance_var_small,
+                                                                      "Aktiva")))$amount
+                                          ))),
+        pas = rbind(pas, data.frame(names_pas = "Summe Passiva",
+                            val_pas = -sum((agg %>%
+                                            filter(stringr::str_detect(balance_var_small,
+                                                                       "Passiva")))$amount
+                                           ))))
+    bal
+}
+
+
+
+
+
+
 #' CreateBalanceTable
 #'
 #' Create a balance table as tex from a ledger journal imported using the
@@ -99,53 +173,39 @@ AggStructure <- function(x){
 #' @author Christoph Rust
 #'
 #' @export
-CreateBalanceSheet <- function(journal, which = "small", tablewidth = "\\textwidth",
+CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small",
+                               tablewidth = "\\textwidth",
                                colwidths = paste0(c(0.3,0.08),tablewidth),
                                file = NULL) {
-    agg <- journal %>%
-        filter(stringr::str_detect(account, "Aktiv") | stringr::str_detect(account, "Passiv")) %>%
-        mutate(balance_var_small = MakeBalanceAccounts(account, which = which)) %>%
-        group_by(balance_var_small) %>%
-        summarize(amount = sum(amount))
 
-    ## create active and passiv side of balance seperately
-    akt <- agg %>%
-        filter(stringr::str_detect(balance_var_small, "Aktiv")) %>%
-        rename(account = balance_var_small) %>%
-        AggStructure() %>%
-        filter(real_name != "Aktiva") %>%
-        mutate(amount = na_if(amount, 0))
-    pas <- agg %>%
-        filter(stringr::str_detect(balance_var_small, "Passiv")) %>%
-        rename(account = balance_var_small) %>%
-        AggStructure() %>%
-        filter(real_name != "Passiva") %>%
-        mutate(amount = -amount,
-               amount = na_if(amount, 0))
+
+    aktpas <- CreateTable(journal = journal, which = which)
+
+    if (!is.null(journal_lastyear)){
+        aktpas_lastyear <- CreateTable(journal = journal_lastyear, which = which) %>% {
+            .$akt <- .$akt %>% rename(val_akt_lastyear = val_akt)
+            .$pas <- .$pas %>% rename(val_pas_lastyear = val_pas)
+            .
+        }
+        ## we assume that lastyear's accounts always is a subset of current yeras accounts
+        akt <- left_join(aktpas$akt, aktpas_lastyear$akt, by="names_akt")
+        pas <- left_join(aktpas$pas, aktpas_lastyear$pas, by="names_pas")
+
+        bal <- cbind(akt, pas)
+    } else {
+        bal <- cbind(aktpas$akt, aktpas$pas)
+    }
+
 
     ## create tex tables
-    if (nrow(akt) > nrow(pas)){
-        pas <- rbind(pas, data.frame(real_name = rep("", times = nrow(akt) - nrow(pas)),
-                                     amount = rep(NA, times = nrow(akt) - nrow(pas))))
-    } else if (nrow(akt) < nrow(pas)) {
-        akt <- rbind(akt, data.frame(real_name = rep("", times = nrow(pas) - nrow(akt)),
-                                     amount = rep(NA, times = nrow(pas) - nrow(akt))))
-    }
-    names(akt) <- c("names_akt", "val_akt")
-    names(pas) <- c("names_pas", "val_pas")
+    ## if (nrow(akt) > nrow(pas)){
+    ##     pas <- rbind(pas, data.frame(real_name = rep("", times = nrow(akt) - nrow(pas)),
+    ##                                  amount = rep(NA, times = nrow(akt) - nrow(pas))))
+    ## } else if (nrow(akt) < nrow(pas)) {
+    ##     akt <- rbind(akt, data.frame(real_name = rep("", times = nrow(pas) - nrow(akt)),
+    ##                                  amount = rep(NA, times = nrow(pas) - nrow(akt))))
+    ## }
 
-    bal <- cbind(akt, pas)
-    bal <- rbind(bal,
-                 data.frame(names_akt = "Summe Aktiva",
-                            val_akt = sum((agg %>%
-                                           filter(stringr::str_detect(balance_var_small,
-                                                                      "Aktiva")))$amount
-                                          ),
-                            names_pas = "Summe Passiva",
-                            val_pas = -sum((agg %>%
-                                            filter(stringr::str_detect(balance_var_small,
-                                                                       "Passiva")))$amount
-                                           )))
     if (is.null(file)){
         xtable::xtable(bal, align = c("l", paste0("L{", colwidths[1], "}"),
                                       paste0("R{", colwidths[2], "}"),
@@ -153,14 +213,58 @@ CreateBalanceSheet <- function(journal, which = "small", tablewidth = "\\textwid
                                       paste0("L{", colwidths[1], "}"),
                                       paste0("R{", colwidths[2], "}")))
     } else {
+
+        left_side <- if (is.null(journal_lastyear)){
+                         c(paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
+                         bal %>%
+                             select(names_akt, val_akt) %>% {
+                                 vapply(1:(nrow(.)-1), function(x){
+                                     paste0(.[x,1], "&", .[x,2], "\\\\")
+                                 }, character(1))
+                             },
+                         "\\end{tabular}")
+                     } else {
+                         c(paste0("\\begin{tabular}[t]{L{0.6\\textwidth}R{0.15\\textwidth}R{0.15\\textwidth}}"),
+                         bal %>%
+                             select(names_akt, val_akt, val_akt_lastyear) %>% {
+                                 vapply(1:(nrow(.)-1), function(x){
+                                     paste0(.[x,1], "&", .[x,2], "&", .[x,3], "\\\\")
+                                 }, character(1))
+                             },
+                         "\\end{tabular}")
+                     }
+
+        right_side <- if(is.null(journal_lastyear)){
+                          c(
+                          paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
+                          bal %>%
+                              select(names_pas, val_pas) %>% {
+                                  vapply(1:(nrow(.)-1), function(x){
+                                      paste0(.[x,1], "&", .[x,2], "\\\\")
+                                  }, character(1))
+                              },
+                          "\\end{tabular}")
+                      } else {
+                          c(paste0("\\begin{tabular}[t]{L{0.6\\textwidth}R{0.15\\textwidth}R{0.15\\textwidth}}"),
+                          bal %>%
+                              select(names_pas, val_pas, val_pas_lastyear) %>% {
+                                  vapply(1:(nrow(.)-1), function(x){
+                                      paste0(.[x,1], "&", .[x,2], "&", .[x,3], "\\\\")
+                                  }, character(1))
+                              },
+                          "\\end{tabular}")
+                      }
+
+
+        ## write the tex string into the file
         c("\\ifdefined\\BalItem",
           "\\else",
           "\\newcolumntype{L}[1]{>{\\raggedright\\arraybackslash}p{#1}}",
           "\\newcolumntype{C}[1]{>{\\centering\\arraybackslash}p{#1}}",
           "\\newcolumntype{R}[1]{>{\\raggedleft\\arraybackslash}p{#1}}",
-          "\\newlength{\\mbylength}",
+          "\\newlength{\\myblength}",
           "\\newlength{\\mbyl}",
-          "\\def\\BalItem#1#2#3{\\setlength{\\mbylength}{\\linewidth}\\settowidth{\\mbyl}{#3}\\addtolength{\\mbylength}{-1.5\\mbyl}\\parbox{\\mbyl}{#1}\\parbox[t]{\\mbylength}{#2}}",
+          "\\def\\BalItem#1#2#3{\\setlength{\\myblength}{\\linewidth}\\settowidth{\\mbyl}{#3}\\addtolength{\\myblength}{-1.5\\mbyl}\\parbox{\\mbyl}{#1}\\parbox[t]{\\myblength}{#2}}",
           "\\def\\BalItemOne#1#2{\\BalItem{#1}{#2}{A.-}}",
           "\\def\\BalItemTwo#1#2{\\BalItem{\\phantom{---}#1}{#2}{---III.-}}",
           "\\def\\BalItemThree#1#2{\\BalItem{\\phantom{------}#1}{#2}{------8.-}}",
@@ -168,38 +272,32 @@ CreateBalanceSheet <- function(journal, which = "small", tablewidth = "\\textwid
           "\\begin{tabular}{l|r}",
           "\\toprule",
           paste0("\\begin{minipage}[t]{0.5",tablewidth," }"),
-          paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
-          bal %>%
-          select(names_akt, val_akt) %>% {
-              vapply(1:(nrow(.)-1), function(x){
-                  paste0(.[x,1], "&", .[x,2], "\\\\")
-              }, character(1))
-          },
-          "\\end{tabular}",
+          left_side,
           "\\end{minipage}",
           "&",
           paste0("\\begin{minipage}[t]{0.5",tablewidth," }"),
-          paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
-          pas %>%
-          select(names_pas, val_pas) %>% {
-              vapply(1:(nrow(.)-1), function(x){
-                  paste0(.[x,1], "&", .[x,2], "\\\\")
-              }, character(1))
-          },
-          "\\end{tabular}",
+          right_side,
           "\\end{minipage}\\\\",
           "\\midrule",
-          paste0("\\textbf{",
-                 paste0(bal[nrow(bal) ,c("names_akt", "val_akt")],
-                        collapse = "} \\hfill \\textbf{"),"} &",
-                 "\\textbf{",
-                 paste0(bal[nrow(bal) ,c("names_pas", "val_pas")],
-                        collapse = "} \\hfill \\textbf{"),"}\\\\"),
+          if (is.null(journal_lastyear)){
+              paste0("\\textbf{",
+                     paste0(bal[nrow(bal) ,c("names_akt", "val_akt")],
+                            collapse = "} \\hfill \\textbf{"),"} &",
+                     "\\textbf{",
+                     paste0(bal[nrow(bal) ,c("names_pas", "val_pas")],
+                            collapse = "} \\hfill \\textbf{"),"}\\\\")
+          } else {
+              paste0("\\textbf{",
+                     paste0(bal[nrow(bal) ,c("names_akt", "val_akt")],
+                            collapse = "} \\hfill \\textbf{"),"} &",
+                     "\\textbf{",
+                     paste0(bal[nrow(bal) ,c("names_pas", "val_pas")],
+                            collapse = "} \\hfill \\textbf{"),"}\\\\")
+
+          },
           "\\end{tabular}") %>%
             stringr::str_replace_all("NA", "") %>%
             stringr::str_replace_all("myItem", "BalItem") %>%
             writeLines(con = file)
     }
 }
-
-

@@ -29,7 +29,7 @@ AggStructureGuV <- function(x){
                     vapply(stringr::str_split(acc, ":"),
                            function(x) {
                                itemContent <- stringr::str_split(x[depth], "\\. ")[[1]]
-                               stringr::str_c("\\myItem",c("One", "Two", "Three")[depth-1],
+                               stringr::str_c("\\BalItem",c("One", "Two", "Three")[depth-1],
                                               "{",itemContent[1], ".}",
                                               "{",itemContent[2], "}"
                                               )
@@ -63,32 +63,18 @@ MakeGuVAccounts <- function(x){
 }
 
 
-#' CreateGuVSheet
+#' CreateGuV
 #'
-#' Create a balance table as tex from a ledger journal imported using the
-#' register function of the R package \code{ledger}.
+#' Create a GuV data frame for a given journal file (does not select)
+#' appropriate entries, hence, this has to be done beforehand!
 #'
-#' @param journal A data frame as returned from the \code{register} function
-#' of the package \code{ledger}.
+#' @param journal A ledger journal file imported by \code{ledger::register()}.
 #'
-#' @param which Character of length one, indicating up to which hierarchy the balance
-#' sheet has to be created. "verysmall" for 'Kleinstkapitalgesellschaften', "small" for
-#' 'Kleinkapitalgesellschaften' and "normal" for all other sizes. This will affect, how
-#' detailed the resulting balance sheet will be.
-#'
-#' @details The function CreateBalanceTable creates a TeX table from a ledger journal
-#' including all the accounts required for reports according to the German HGB. Currently,
-#' the functions result should only be used in landscape mode (for instance by including
-#' the output in a rotatebox environment). Several other things are hard coded as well
-#' and will be made available as an argument in the future.
-#'
-#' @return An xtable object containing the balance sheet.
-#'
-#' @author Christoph Rust
+#' @return A data frame containing the aggregated positions.
 #'
 #' @export
-CreateGuVSheet <- function(journal, tablewidth = "\\textwidth",
-                               colwidths = paste0(c(0.8,0.1),tablewidth)){
+CreateGuV <- function(journal){
+
     agg <- journal %>%
         filter(stringr::str_detect(account, "Ertrag") | stringr::str_detect(account, "Aufwand")) %>%
         mutate(balance_var_small = MakeGuVAccounts(account)) %>%
@@ -114,19 +100,92 @@ CreateGuVSheet <- function(journal, tablewidth = "\\textwidth",
     guv <- rbind(expens, income) %>%
         arrange(pos_nr)
     ## compute missing entries
-    BrErgUms <- data.frame(real_name = "\\myItemOne{3.}{Bruttoergebnis vom Umsatz}",
+    BrErgUms <- data.frame(real_name = "\\BalItemOne{3.}{Bruttoergebnis vom Umsatz}",
                            amount = guv$amount[1] - guv$amount[2], pos_nr = 3)
-    ErNaSteu <- data.frame(real_name = "\\myItemOne{14.}{Ergebnis nach Steuern}",
+    ErNaSteu <- data.frame(real_name = "\\BalItemOne{14.}{Ergebnis nach Steuern}",
                            amount = guv$amount %*% c(1,-1,-1,-1,1,-1,1,1,1,-1,-1,-1,0),
                            pos_nr = 14)
-    JaUebFehl <- data.frame(real_name = '\\myItemOne{16.}{Jahres\\"uberschuss/Jahresfehlbetrag}',
+    JaUebFehl <- data.frame(real_name = '\\BalItemOne{16.}{Jahres\\"uberschuss/Jahresfehlbetrag}',
                             amount = ErNaSteu$amount - guv$amount[13],
                             pos_nr = 16)
+
     guv <- rbind(guv, BrErgUms, ErNaSteu, JaUebFehl) %>%
         arrange(pos_nr) %>%
         select(real_name, amount) %>%
         mutate(amount = if_else(amount == 0, 0, amount))
+}
 
-    xtable::xtable(guv, align = c("l", paste0("L{", colwidths[1], "}"),
-                                  paste0("R{", colwidths[2], "}")))
+
+
+#' CreateGuVSheet
+#'
+#' Create a balance table as tex from a ledger journal imported using the
+#' register function of the R package \code{ledger}.
+#'
+#' @param journal A data frame as returned from the \code{register} function
+#' of the package \code{ledger}.
+#'
+#' @param which Character of length one, indicating up to which hierarchy the balance
+#' sheet has to be created. "verysmall" for 'Kleinstkapitalgesellschaften', "small" for
+#' 'Kleinkapitalgesellschaften' and "normal" for all other sizes. This will affect, how
+#' detailed the resulting balance sheet will be.
+#'
+#' @details The function CreateBalanceTable creates a TeX table from a ledger journal
+#' including all the accounts required for reports according to the German HGB. Currently,
+#' the functions result should only be used in landscape mode (for instance by including
+#' the output in a rotatebox environment). Several other things are hard coded as well
+#' and will be made available as an argument in the future.
+#'
+#' @return An xtable object containing the balance sheet.
+#'
+#' @author Christoph Rust
+#'
+#' @export
+CreateGuVSheet <- function(journal, journal_lastyear = NULL, tablewidth = "\\textwidth",
+                           colwidths = paste0(c(0.8,0.1),tablewidth),
+                           file = NULL){
+
+
+    if (is.null(file)){
+        xtable::xtable(guv, align = c("l", paste0("L{", colwidths[1], "}"),
+                                      paste0("R{", colwidths[2], "}")))
+    } else {
+        c("\\ifdefined\\BalItem",
+          "\\else",
+          "\\newcolumntype{L}[1]{>{\\raggedright\\arraybackslash}p{#1}}",
+          "\\newcolumntype{C}[1]{>{\\centering\\arraybackslash}p{#1}}",
+          "\\newcolumntype{R}[1]{>{\\raggedleft\\arraybackslash}p{#1}}",
+          "\\newlength{\\myblength}",
+          "\\newlength{\\mbyl}",
+          "\\def\\BalItem#1#2#3{\\setlength{\\myblength}{\\linewidth}\\settowidth{\\mbyl}{#3}\\addtolength{\\myblength}{-1.5\\mbyl}\\parbox{\\mbyl}{#1}\\parbox[t]{\\myblength}{#2}}",
+          "\\def\\BalItemOne#1#2{\\BalItem{#1}{#2}{A.-}}",
+          "\\def\\BalItemTwo#1#2{\\BalItem{\\phantom{---}#1}{#2}{---III.-}}",
+          "\\def\\BalItemThree#1#2{\\BalItem{\\phantom{------}#1}{#2}{------8.-}}",
+          "\\fi",
+          if (is.null(journal_lastyear)) {
+              paste0("\\begin{tabular}[t]{L{", colwidths[1], "}R{", colwidths[2], "}}")
+          } else {
+              paste0("\\begin{tabular}[t]{L{", colwidths[1], "}R{", colwidths[2], "}R{", colwidths[2], "}}")
+          },
+          "\\toprule",
+          if (!is.null(years_in_header)) {
+              paste0("&",years_in_header[1],
+                     if (!is.null(journal_lastyear))
+                         paste0("&", years_in_header[2]) else NULL, "\\\\\\midrule")
+          } else NULL,
+          if (is.null(journal_lastyear)) {
+              guv <- rbind(guv, BrErgUms, ErNaSteu, JaUebFehl) %>%
+                  arrange(pos_nr) %>%
+                  select(real_name, amount) %>%
+                  mutate(amount = if_else(amount == 0, 0, amount))
+          } else {
+          }
+
+          "\\bottomrule",
+          "\\end{tabular}") %>%
+            stringr::str_replace_all("NA", "") %>%
+            stringr::str_replace_all("myItem", "BalItem") %>%
+            writeLines(con = file)
+
+    }
 }

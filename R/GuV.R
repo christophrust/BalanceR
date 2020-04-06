@@ -143,16 +143,17 @@ CreateGuV <- function(journal){
 #' @author Christoph Rust
 #'
 #' @export
-CreateGuVSheet <- function(journal, journal_lastyear = NULL, tablewidth = "\\textwidth",
-                           colwidths = paste0(c(0.8,0.1),tablewidth),
-                           file = NULL){
+CreateGuVSheet <- function(journal, journal_lastyear = NULL, file = NULL,
+                           tablewidth = "\\textwidth",
+                           years_in_header = NULL,
+                           colwidths = paste0(c(0.8,0.1),tablewidth)){
 
     guv <- CreateGuV(journal)
 
     if (!is.null(journal_lastyear)){
         guv_lastyear <- CreateGuV(journal_lastyear) %>%
             select(pos_nr, amount) %>%
-            rename(amaunt_ly = amount)
+            rename(amount_ly = amount)
         guv <- left_join(guv, guv_lastyear, by = "pos_nr") %>%
             arrange(pos_nr)
     }
@@ -204,12 +205,12 @@ CreateGuVSheet <- function(journal, journal_lastyear = NULL, tablewidth = "\\tex
                       }, character(1))
                   },
                   "\\midrule",
-                  guv %>% select(real_name, amount) %>% {
+                  guv %>% select(real_name, amount, amount_ly) %>% {
                       paste0(.[nrow(.),1], "&", .[nrow(.),2], "&", .[nrow(.),3],
                              "\\\\\\bottomrule")
                   }
                   )
-          }
+          },
           "\\end{tabular}") %>%
             stringr::str_replace_all("NA", "") %>%
             writeLines(con = file)

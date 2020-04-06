@@ -179,7 +179,7 @@ CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small"
                                file = NULL) {
 
 
-    aktpas <- CreateTable(journal = journal, which = which)
+    bal_list <- CreateTable(journal = journal, which = which)
 
     if (!is.null(journal_lastyear)){
         aktpas_lastyear <- CreateTable(journal = journal_lastyear, which = which) %>% {
@@ -188,25 +188,34 @@ CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small"
             .
         }
         ## we assume that lastyear's accounts always is a subset of current yeras accounts
-        akt <- left_join(aktpas$akt, aktpas_lastyear$akt, by="names_akt")
-        pas <- left_join(aktpas$pas, aktpas_lastyear$pas, by="names_pas")
+        akt <- left_join(bal_list$akt, aktpas_lastyear$akt, by="names_akt")
+        pas <- left_join(bal_list$pas, aktpas_lastyear$pas, by="names_pas")
 
-        bal <- cbind(akt, pas)
-    } else {
-        bal <- cbind(aktpas$akt, aktpas$pas)
+        bal_list <- list(akt = akt, pas = pas)
     }
 
 
-    ## create tex tables
-    ## if (nrow(akt) > nrow(pas)){
-    ##     pas <- rbind(pas, data.frame(real_name = rep("", times = nrow(akt) - nrow(pas)),
-    ##                                  amount = rep(NA, times = nrow(akt) - nrow(pas))))
-    ## } else if (nrow(akt) < nrow(pas)) {
-    ##     akt <- rbind(akt, data.frame(real_name = rep("", times = nrow(pas) - nrow(akt)),
-    ##                                  amount = rep(NA, times = nrow(pas) - nrow(akt))))
-    ## }
+
 
     if (is.null(file)){
+
+        ## make both entries have same number of rows
+        if (nrow(bal_list$akt) > nrow(bal_list$pas)){
+            pas <- rbind(bal_list$pas,
+                         data.frame(real_name = rep("", times = nrow(bal_list$akt) -
+                                                            nrow(bal_list$pas)),
+                                    amount = rep(NA, times = nrow(bal_list$akt) -
+                                                         nrow(bal_list$pas))))
+        } else if (nrow(bal_list$akt) < nrow(bal_list$pas)) {
+            akt <- rbind(bal_list$akt,
+                         data.frame(real_name = rep("", times = nrow(bal_list$pas) -
+                                                            nrow(bal_list$akt)),
+                                    amount = rep(NA, times = nrow(bal_list$pas) -
+                                                         nrow(bal_list$akt))))
+        }
+
+        bal <- cbind(akt, pas)
+
         xtable::xtable(bal, align = c("l", paste0("L{", colwidths[1], "}"),
                                       paste0("R{", colwidths[2], "}"),
                                       "|",
@@ -216,29 +225,28 @@ CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small"
 
         left_side <- if (is.null(journal_lastyear)){
                          c(paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
-                         bal %>%
-                             select(names_akt, val_akt) %>% {
-                                 vapply(1:(nrow(.)-1), function(x){
-                                     paste0(.[x,1], "&", .[x,2], "\\\\")
-                                 }, character(1))
-                             },
-                         "\\end{tabular}")
+                           bal_list$akt %>%
+                           select(names_akt, val_akt) %>% {
+                               vapply(1:(nrow(.)-1), function(x){
+                                   paste0(.[x,1], "&", .[x,2], "\\\\")
+                               }, character(1))
+                           },
+                           "\\end{tabular}")
                      } else {
                          c(paste0("\\begin{tabular}[t]{L{0.6\\textwidth}R{0.15\\textwidth}R{0.15\\textwidth}}"),
-                         bal %>%
-                             select(names_akt, val_akt, val_akt_lastyear) %>% {
-                                 vapply(1:(nrow(.)-1), function(x){
-                                     paste0(.[x,1], "&", .[x,2], "&", .[x,3], "\\\\")
-                                 }, character(1))
-                             },
-                         "\\end{tabular}")
+                           bal_list$akt %>%
+                           select(names_akt, val_akt, val_akt_lastyear) %>% {
+                               vapply(1:(nrow(.)-1), function(x){
+                                   paste0(.[x,1], "&", .[x,2], "&", .[x,3], "\\\\")
+                               }, character(1))
+                           },
+                           "\\end{tabular}")
                      }
 
         right_side <- if(is.null(journal_lastyear)){
-                          c(
-                          paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
-                          bal %>%
-                              select(names_pas, val_pas) %>% {
+                          c(paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
+                            bal_list$pas %>%
+                            select(names_pas, val_pas) %>% {
                                   vapply(1:(nrow(.)-1), function(x){
                                       paste0(.[x,1], "&", .[x,2], "\\\\")
                                   }, character(1))
@@ -246,8 +254,8 @@ CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small"
                           "\\end{tabular}")
                       } else {
                           c(paste0("\\begin{tabular}[t]{L{0.6\\textwidth}R{0.15\\textwidth}R{0.15\\textwidth}}"),
-                          bal %>%
-                              select(names_pas, val_pas, val_pas_lastyear) %>% {
+                            bal_list$pas %>%
+                            select(names_pas, val_pas, val_pas_lastyear) %>% {
                                   vapply(1:(nrow(.)-1), function(x){
                                       paste0(.[x,1], "&", .[x,2], "&", .[x,3], "\\\\")
                                   }, character(1))
@@ -281,17 +289,17 @@ CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small"
           "\\midrule",
           if (is.null(journal_lastyear)){
               paste0("\\textbf{",
-                     paste0(bal[nrow(bal) ,c("names_akt", "val_akt")],
+                     paste0(bal_list$akt[nrow(bal_list$akt), c("names_akt", "val_akt")],
                             collapse = "} \\hfill \\textbf{"),"} &",
                      "\\textbf{",
-                     paste0(bal[nrow(bal) ,c("names_pas", "val_pas")],
+                     paste0(bal_list$pas[nrow(bal_list$pas), c("names_pas", "val_pas")],
                             collapse = "} \\hfill \\textbf{"),"}\\\\")
           } else {
               paste0("\\textbf{",
-                     paste0(bal[nrow(bal) ,c("names_akt", "val_akt")],
+                     paste0(bal_list$akt[nrow(bal_list$akt), c("names_akt", "val_akt")],
                             collapse = "} \\hfill \\textbf{"),"} &",
                      "\\textbf{",
-                     paste0(bal[nrow(bal) ,c("names_pas", "val_pas")],
+                     paste0(bal_list$pas[nrow(bal_list$pas), c("names_pas", "val_pas")],
                             collapse = "} \\hfill \\textbf{"),"}\\\\")
 
           },

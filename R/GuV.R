@@ -111,8 +111,10 @@ CreateGuV <- function(journal){
 
     guv <- rbind(guv, BrErgUms, ErNaSteu, JaUebFehl) %>%
         arrange(pos_nr) %>%
-        select(real_name, amount) %>%
+        select(pos_nr, real_name, amount) %>%
         mutate(amount = if_else(amount == 0, 0, amount))
+
+    guv
 }
 
 
@@ -145,6 +147,15 @@ CreateGuVSheet <- function(journal, journal_lastyear = NULL, tablewidth = "\\tex
                            colwidths = paste0(c(0.8,0.1),tablewidth),
                            file = NULL){
 
+    guv <- CreateGuV(journal)
+
+    if (!is.null(journal_lastyear)){
+        guv_lastyear <- CreateGuV(journal_lastyear) %>%
+            select(pos_nr, amount) %>%
+            rename(amaunt_ly = amount)
+        guv <- left_join(guv, guv_lastyear, by = "pos_nr") %>%
+            arrange(pos_nr)
+    }
 
     if (is.null(file)){
         xtable::xtable(guv, align = c("l", paste0("L{", colwidths[1], "}"),
@@ -174,18 +185,33 @@ CreateGuVSheet <- function(journal, journal_lastyear = NULL, tablewidth = "\\tex
                          paste0("&", years_in_header[2]) else NULL, "\\\\\\midrule")
           } else NULL,
           if (is.null(journal_lastyear)) {
-              guv <- rbind(guv, BrErgUms, ErNaSteu, JaUebFehl) %>%
-                  arrange(pos_nr) %>%
-                  select(real_name, amount) %>%
-                  mutate(amount = if_else(amount == 0, 0, amount))
+              c(
+                  guv %>% select(real_name, amount) %>% {
+                      vapply(1:(nrow(.)-1), function(i){
+                          paste0(.[i,1], "&", .[i,2], "\\\\")
+                      }, character(1))
+                  },
+                  "\\midrule",
+                  guv %>% select(real_name, amount) %>% {
+                      paste0(.[nrow(.),1], "&", .[nrow(.),2], "\\\\\\bottomrule")
+                  }
+              )
           } else {
+              c(
+                  guv %>% select(real_name, amount, amount_ly) %>% {
+                      vapply(1:(nrow(.)-1), function(i){
+                          paste0(.[i,1], "&", .[i,2], "&", .[i,3], "\\\\")
+                      }, character(1))
+                  },
+                  "\\midrule",
+                  guv %>% select(real_name, amount) %>% {
+                      paste0(.[nrow(.),1], "&", .[nrow(.),2], "&", .[nrow(.),3],
+                             "\\\\\\bottomrule")
+                  }
+                  )
           }
-
-          "\\bottomrule",
           "\\end{tabular}") %>%
             stringr::str_replace_all("NA", "") %>%
-            stringr::str_replace_all("myItem", "BalItem") %>%
             writeLines(con = file)
-
     }
 }

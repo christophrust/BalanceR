@@ -162,7 +162,9 @@ CreateGuVSheet <- function(journal, journal_lastyear = NULL, file = NULL,
         xtable::xtable(guv, align = c("l", paste0("L{", colwidths[1], "}"),
                                       paste0("R{", colwidths[2], "}")))
     } else {
-        c("\\ifdefined\\BalItem",
+        c("\\let\\myblength\\relax",
+          "\\let\\mbyl\\relax",
+          "\\ifdefined\\BalItem",
           "\\else",
           "\\newcolumntype{L}[1]{>{\\raggedright\\arraybackslash}p{#1}}",
           "\\newcolumntype{C}[1]{>{\\centering\\arraybackslash}p{#1}}",
@@ -174,10 +176,11 @@ CreateGuVSheet <- function(journal, journal_lastyear = NULL, file = NULL,
           "\\def\\BalItemTwo#1#2{\\BalItem{\\phantom{---}#1}{#2}{---III.-}}",
           "\\def\\BalItemThree#1#2{\\BalItem{\\phantom{------}#1}{#2}{------8.-}}",
           "\\fi",
+          "\\resizebox{\\textwidth}{!}{",
           if (is.null(journal_lastyear)) {
-              paste0("\\begin{tabular}[t]{L{", colwidths[1], "}R{", colwidths[2], "}}")
+              paste0("\\begin{tabular}[t]{L{16cm}R{2cm}}")
           } else {
-              paste0("\\begin{tabular}[t]{L{", colwidths[1], "}R{", colwidths[2], "}R{", colwidths[2], "}}")
+              paste0("\\begin{tabular}[t]{L{16cm}R{2cm}R{2cm}}")
           },
           "\\toprule",
           if (!is.null(years_in_header)) {
@@ -211,7 +214,7 @@ CreateGuVSheet <- function(journal, journal_lastyear = NULL, file = NULL,
                   }
                   )
           },
-          "\\end{tabular}") %>%
+          "\\end{tabular}}") %>%
             stringr::str_replace_all("NA", "") %>%
             writeLines(con = file)
     }

@@ -174,7 +174,7 @@ CreateTable <- function(journal, which){
 #'
 #' @export
 CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small",
-                               tablewidth = "\\textwidth",
+                               tablewidth = "\\textwidth", years_in_header = NULL,
                                colwidths = paste0(c(0.3,0.08),tablewidth),
                                file = NULL) {
 
@@ -225,6 +225,9 @@ CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small"
 
         left_side <- if (is.null(journal_lastyear)){
                          c(paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
+                           if(!is.null(years_in_header)) {
+                               paste0("&",years_in_header[1],"\\\\\\midrule")
+                           } else NULL,
                            bal_list$akt %>%
                            select(names_akt, val_akt) %>% {
                                vapply(1:(nrow(.)-1), function(x){
@@ -233,7 +236,10 @@ CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small"
                            },
                            "\\end{tabular}")
                      } else {
-                         c(paste0("\\begin{tabular}[t]{L{0.6\\textwidth}R{0.15\\textwidth}R{0.15\\textwidth}}"),
+                         c(paste0("\\begin{tabular}[t]{L{0.58\\textwidth}R{0.15\\textwidth}R{0.15\\textwidth}}"),
+                           if(!is.null(years_in_header)) {
+                               paste0("&",years_in_header[1],"&", years_in_header[2],"\\\\\\midrule")
+                           } else NULL,
                            bal_list$akt %>%
                            select(names_akt, val_akt, val_akt_lastyear) %>% {
                                vapply(1:(nrow(.)-1), function(x){
@@ -243,8 +249,33 @@ CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small"
                            "\\end{tabular}")
                      }
 
+        left_side_lastrow <- if (is.null(journal_lastyear)){
+                         c(paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
+                           bal_list$akt %>%
+                           select(names_akt, val_akt) %>% {
+                               paste0("\\textbf{",
+                                      .[nrow(.),1], "}&\\textbf{",
+                                      .[nrow(.),2], "}")
+                           },
+                           "\\end{tabular}")
+                     } else {
+                         c(paste0("\\begin{tabular}[t]{L{0.58\\textwidth}R{0.15\\textwidth}R{0.15\\textwidth}}"),
+                           bal_list$akt %>%
+                           select(names_akt, val_akt, val_akt_lastyear) %>% {
+                               paste0("\\textbf{",
+                                      .[nrow(.),1], "}&\\textbf{",
+                                      .[nrow(.),2], "}&\\textbf{",
+                                      .[nrow(.),3], "}")
+                           },
+                           "\\end{tabular}")
+                     }
+
+
         right_side <- if(is.null(journal_lastyear)){
                           c(paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
+                            if(!is.null(years_in_header)) {
+                                paste0("&",years_in_header[1],"\\\\\\midrule")
+                            } else NULL,
                             bal_list$pas %>%
                             select(names_pas, val_pas) %>% {
                                   vapply(1:(nrow(.)-1), function(x){
@@ -253,7 +284,10 @@ CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small"
                               },
                           "\\end{tabular}")
                       } else {
-                          c(paste0("\\begin{tabular}[t]{L{0.6\\textwidth}R{0.15\\textwidth}R{0.15\\textwidth}}"),
+                          c(paste0("\\begin{tabular}[t]{L{0.58\\textwidth}R{0.15\\textwidth}R{0.15\\textwidth}}"),
+                            if(!is.null(years_in_header)) {
+                                paste0("&",years_in_header[1],"&", years_in_header[2],"\\\\\\midrule")
+                            } else NULL,
                             bal_list$pas %>%
                             select(names_pas, val_pas, val_pas_lastyear) %>% {
                                   vapply(1:(nrow(.)-1), function(x){
@@ -262,10 +296,32 @@ CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small"
                               },
                           "\\end{tabular}")
                       }
+        right_side_lastrow <- if(is.null(journal_lastyear)){
+                          c(paste0("\\begin{tabular}[t]{L{0.75\\textwidth}R{0.15\\textwidth}}"),
+                            bal_list$pas %>%
+                            select(names_pas, val_pas) %>% {
+                                paste0("\\textbf{",
+                                       .[nrow(.),1], "}&\\textbf{",
+                                       .[nrow(.),2], "}")
+                              },
+                          "\\end{tabular}")
+                      } else {
+                          c(paste0("\\begin{tabular}[t]{L{0.58\\textwidth}R{0.15\\textwidth}R{0.15\\textwidth}}"),
+                            bal_list$pas %>%
+                            select(names_pas, val_pas, val_pas_lastyear) %>% {
+                                paste0("\\textbf{",
+                                       .[nrow(.),1], "}&\\textbf{",
+                                       .[nrow(.),2], "}&\\textbf{",
+                                       .[nrow(.),3], "}")
+                              },
+                          "\\end{tabular}")
+                      }
 
 
         ## write the tex string into the file
-        c("\\ifdefined\\BalItem",
+        c("\\let\\myblength\\relax",
+          "\\let\\mbyl\\relax",
+          "\\ifdefined\\BalItem",
           "\\else",
           "\\newcolumntype{L}[1]{>{\\raggedright\\arraybackslash}p{#1}}",
           "\\newcolumntype{C}[1]{>{\\centering\\arraybackslash}p{#1}}",
@@ -277,33 +333,25 @@ CreateBalanceSheet <- function(journal, journal_lastyear = NULL, which = "small"
           "\\def\\BalItemTwo#1#2{\\BalItem{\\phantom{---}#1}{#2}{---III.-}}",
           "\\def\\BalItemThree#1#2{\\BalItem{\\phantom{------}#1}{#2}{------8.-}}",
           "\\fi",
+          "\\resizebox{\\textwidth}{!}{",
           "\\begin{tabular}{l|r}",
           "\\toprule",
-          paste0("\\begin{minipage}[t]{0.5",tablewidth," }"),
+          paste0("\\begin{minipage}[t]{10cm}"),
           left_side,
           "\\end{minipage}",
           "&",
-          paste0("\\begin{minipage}[t]{0.5",tablewidth," }"),
+          paste0("\\begin{minipage}[t]{10cm}"),
           right_side,
           "\\end{minipage}\\\\",
           "\\midrule",
-          if (is.null(journal_lastyear)){
-              paste0("\\textbf{",
-                     paste0(bal_list$akt[nrow(bal_list$akt), c("names_akt", "val_akt")],
-                            collapse = "} \\hfill \\textbf{"),"} &",
-                     "\\textbf{",
-                     paste0(bal_list$pas[nrow(bal_list$pas), c("names_pas", "val_pas")],
-                            collapse = "} \\hfill \\textbf{"),"}\\\\")
-          } else {
-              paste0("\\textbf{",
-                     paste0(bal_list$akt[nrow(bal_list$akt), c("names_akt", "val_akt")],
-                            collapse = "} \\hfill \\textbf{"),"} &",
-                     "\\textbf{",
-                     paste0(bal_list$pas[nrow(bal_list$pas), c("names_pas", "val_pas")],
-                            collapse = "} \\hfill \\textbf{"),"}\\\\")
-
-          },
-          "\\end{tabular}") %>%
+          paste0("\\begin{minipage}[t]{10cm}"),
+          left_side_lastrow,
+          "\\end{minipage}",
+          "&",
+          paste0("\\begin{minipage}[t]{10cm}"),
+          right_side_lastrow,
+          "\\end{minipage}\\\\",
+          "\\bottomrule\\end{tabular}}") %>%
             stringr::str_replace_all("NA", "") %>%
             stringr::str_replace_all("myItem", "BalItem") %>%
             writeLines(con = file)

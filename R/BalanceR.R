@@ -108,14 +108,16 @@ CreateTable <- function(journal, which){
         rename(account = balance_var_small) %>%
         AggStructure() %>%
         filter(real_name != "Aktiva") %>%
-        mutate(amount = na_if(amount, 0))
+      mutate(amount = if_else(abs(amount) < 0.0001, 0 , amount),
+             amount = na_if(amount, 0))
     pas <- agg %>%
         filter(stringr::str_detect(balance_var_small, "Passiv")) %>%
         rename(account = balance_var_small) %>%
         AggStructure() %>%
         filter(real_name != "Passiva") %>%
-        mutate(amount = -amount,
-               amount = na_if(amount, 0))
+      mutate(amount = -amount,
+             amount = if_else(abs(amount) < 0.0001, 0 , amount),
+             amount = na_if(amount, 0))
 
     ## create tex tables
     ## if (nrow(akt) > nrow(pas)){

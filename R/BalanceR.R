@@ -55,7 +55,7 @@ AggStructure <- function(x){
                     vapply(stringr::str_split(acc, ":"),
                            function(x) {
                                itemContent <- stringr::str_split(x[depth], "\\. ")[[1]]
-                               stringr::str_c("\\myItem",c("One", "Two", "Three")[depth-1],
+                               stringr::str_c("\\myItem",c("", "One", "Two", "Three")[depth],
                                               "{",itemContent[1], ".}",
                                               "{",itemContent[2], "}"
                                               )
